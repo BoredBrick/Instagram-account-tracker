@@ -1,42 +1,47 @@
-from win10toast_click import ToastNotifier
-import instaloader
-from datetime import datetime, timedelta
 import os
+from datetime import datetime, timedelta
+import instaloader
+import re
 
-previous_day = (datetime.today() - timedelta(days=1)).strftime('%Y-%m-%d')
+from winotify import Notification
+
+# Find the latest folder
+date_folder_pattern = re.compile(r'\d{4}-\d{2}-\d{2}')
+folders = [folder for folder in os.listdir() if os.path.isdir(
+    folder) and date_folder_pattern.match(folder)]
+latest_folder = max(folders) if folders else None
+
+# Set the default previous_day to yesterday if no matching folders are found
+previous_day = (datetime.today() - timedelta(days=1)
+                ).strftime('%Y-%m-%d') if not latest_folder else latest_folder
 today = datetime.today().strftime('%Y-%m-%d')
 
-path_today = os.getcwd() + "\\" + str(today)
-path_today_stories = path_today + "\\" + "storicka"
-path_yesterday = os.getcwd() + "\\" + str(previous_day)
-
-found_previous = False
-for i in range(2, 31):
-    if os.path.isdir(path_yesterday):
-        found_previous = True
-        break
-    else:
-        previous_day = (datetime.today() - timedelta(days=i)).strftime('%Y-%m-%d')
-        path_yesterday = os.getcwd() + "\\" + str(previous_day)
-
-if not found_previous:
-    previous_day = (datetime.today() - timedelta(days=1)).strftime('%Y-%m-%d')
-    today = datetime.today().strftime('%Y-%m-%d')
+# Update paths
+path_today = os.path.join(os.getcwd(), today)
+path_yesterday = os.path.join(os.getcwd(), previous_day)
+found_previous = os.path.isdir(path_yesterday)
 
 try:
     os.mkdir(path_today)
-except:
+except FileExistsError:
     pass
 
-old_file = path_yesterday + "\\" + str(previous_day) + '.txt'
-new_file = path_today + "\\" + str(today) + '.txt'
-
-L = instaloader.Instaloader(save_metadata=False, dirname_pattern=path_today_stories)
-L.login("YOUR_LOGIN", "YOUR_PASSWORD")
+old_file = os.path.join(path_yesterday, f'{previous_day}.txt')
+new_file = os.path.join(path_today, f'{today}.txt')
+what_is_new_file = os.path.join(path_today, "What is new.txt")
 
 
-profile = instaloader.Profile.from_username(L.context, "TRACKER_ACCOUNT_NAME")
-L.dirname_pattern = path_today
+loader = instaloader.Instaloader(
+    save_metadata=False)
+loader.load_session_from_file("caban__daniel")
+
+profile = instaloader.Profile.from_username(loader.context, "caban__daniel")
+
+
+loader.dirname_pattern = path_today
+
+print("Loading instagram data...")
+
 
 with open(new_file, 'w') as file:
     for follower in profile.get_followers():
@@ -48,52 +53,51 @@ with open(new_file, 'w') as file:
 if not found_previous:
     exit()
 
-with open(old_file, 'r') as f:
-    old_data = f.readlines()
-    divide = old_data.index('\n')
-    old_followers = old_data[:divide]
-    old_followees = old_data[divide:]
 
-with open(new_file, 'r') as f:
-    new_data = f.readlines()
-    divide = new_data.index('\n')
-    new_followers = new_data[:divide]
-    new_followees = new_data[divide:]
-
-what_is_new_file = path_today + "\\" + "What is new" + '.txt'
-with open(what_is_new_file, 'w') as f:
-
-    who_followed = [follower for follower in new_followers if follower not in old_followers]
-    who_unfollowed = [follower for follower in old_followers if follower not in new_followers]
-    who_was_followed = [followee for followee in new_followees if followee not in old_followees]
-    who_was_unfollowed = [followee for followee in old_followees if followee not in new_followees]
-
-    f.write("Who followed:\n")
-    for item in who_followed:
-        f.write(item.strip() + '\n')
-    f.write("\n\n")
-    f.write("Who unfollowed:\n")
-    for item in who_unfollowed:
-        f.write(item.strip() + '\n')
-    f.write("\n\n")
-    f.write("Who was followed:\n")
-    for item in who_was_followed:
-        f.write(item.strip() + '\n')
-    f.write("\n\n")
-    f.write("Who was unfollowed:\n")
-    for item in who_was_unfollowed:
-        f.write(item.strip() + '\n')
+def read_followers_data(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            data = file.readlines()
+            divide = data.index('\n')
+            followers = data[:divide]
+            followees = data[divide:]
+            return followers, followees
+    except FileNotFoundError:
+        return [], []
 
 
-def openFile():
-    os.startfile(path_today)
+def write_what_is_new(file_path, data):
+    with open(file_path, 'w') as f:
+        for category, items in data.items():
+            f.write(f"{category}:\n")
+            f.writelines(item.strip() + '\n' for item in items)
+            f.write("\n\n")
+
+
+old_followers, old_followees = read_followers_data(old_file)
+new_followers, new_followees = read_followers_data(new_file)
+
+changes = {
+    'Who followed': [follower for follower in new_followers if follower not in old_followers],
+    'Who unfollowed': [follower for follower in old_followers if follower not in new_followers],
+    'Who was followed': [followee for followee in new_followees if followee not in old_followees],
+    'Who was unfollowed': [followee for followee in old_followees if followee not in new_followees]
+}
+
+print("Writing what is new...")
+write_what_is_new(what_is_new_file, changes)
+
+
+path, dirs, files = next(os.walk(path_today))
+file_count = len(files)
+
+DEFAULT_LINES = 10
+num_lines = sum(1 for _ in open(what_is_new_file)) - DEFAULT_LINES
+
+new_info_message = 'New info!' if num_lines > 0 else "Nothing new"
 
 
 file_count = 0
-
-if os.path.isdir(path_today_stories):
-    path, dirs, files = next(os.walk(path_today_stories))
-    file_count = len(files)
 
 DEFAULT_LINES = 10
 num_lines = sum(1 for _ in open(what_is_new_file)) - DEFAULT_LINES
@@ -101,6 +105,18 @@ num_lines = sum(1 for _ in open(what_is_new_file)) - DEFAULT_LINES
 new_info_message = 'New stuff' if num_lines > 0 else "Nothing new"
 
 
-toast = ToastNotifier()
-toast.show_toast("InstaLoader daily update", f"Stories: {file_count}  {new_info_message}",
-                 icon_path=None, duration=5, callback_on_click=openFile)
+toast = Notification(
+    app_id="Instaloader",
+    title="Instaloader",
+    msg=(
+        f'New followers: {len(changes["Who followed"])} | '
+        f'Unfollowers: {len(changes["Who unfollowed"])} | '
+        f'New followees: {len(changes["Who was followed"])} | '
+        f'Unfollowees: {len(changes["Who was unfollowed"])}'
+    ),
+    duration="long"
+)
+
+toast.show()
+
+os.startfile(path_today)
