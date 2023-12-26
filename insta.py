@@ -2,8 +2,8 @@ import os
 from datetime import datetime, timedelta
 import instaloader
 import re
+from win10toast_click import ToastNotifier
 
-from winotify import Notification
 
 # Find the latest folder
 date_folder_pattern = re.compile(r'\d{4}-\d{2}-\d{2}')
@@ -88,35 +88,14 @@ print("Writing what is new...")
 write_what_is_new(what_is_new_file, changes)
 
 
-path, dirs, files = next(os.walk(path_today))
-file_count = len(files)
-
-DEFAULT_LINES = 10
-num_lines = sum(1 for _ in open(what_is_new_file)) - DEFAULT_LINES
-
-new_info_message = 'New info!' if num_lines > 0 else "Nothing new"
+def openFile():
+    os.startfile(path_today)
 
 
-file_count = 0
-
-DEFAULT_LINES = 10
-num_lines = sum(1 for _ in open(what_is_new_file)) - DEFAULT_LINES
-
-new_info_message = 'New stuff' if num_lines > 0 else "Nothing new"
-
-
-toast = Notification(
-    app_id="Instaloader",
-    title="Instaloader",
-    msg=(
-        f'New followers: {len(changes["Who followed"])} | '
-        f'Unfollowers: {len(changes["Who unfollowed"])} | '
-        f'New followees: {len(changes["Who was followed"])} | '
-        f'Unfollowees: {len(changes["Who was unfollowed"])}'
-    ),
-    duration="long"
-)
-
-toast.show()
-
-os.startfile(path_today)
+toast = ToastNotifier()
+toast.show_toast("InstaLoader daily update",
+                 f'New followers:\n{"".join(map(str, changes["Who followed"]))}\n'
+                 f'Unfollowers:\n{"".join(map(str, changes["Who unfollowed"]))}\n'
+                 f'New followed:\n{"".join(map(str, changes["Who was followed"]))}\n'
+                 f'Unfollowed:\n{"".join(map(str, changes["Who was unfollowed"]))}\n',
+                 icon_path=None, duration=5, callback_on_click=openFile)
